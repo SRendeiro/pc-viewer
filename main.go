@@ -65,7 +65,9 @@ func displayRessources(output string, app *tview.Application) {
 	updateNav := func() {
 		navigation.Clear()
 		for _, ressource := range ressources {
-			navigation.AddItem(ressource, "", 0, nil)
+			navigation.AddItem(ressource, "", 0, func() {
+				app.Stop()
+			})
 		}
 
 	}
