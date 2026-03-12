@@ -17,19 +17,24 @@ type Ressource struct {
 	Size   int
 }
 
+type Project struct {
+	dc         string
+	ressources []string
+	project    string
+}
+
 func main() {
-	projectName := ""
-	dc := ""
+	currentProject := Project{}
 	app := tview.NewApplication()
 	form := tview.NewForm().
 		AddDropDown("Region", []string{"dc3-a", "dc4-a"}, 0, func(datacenter string, option int) {
-			dc = datacenter
+			currentProject.dc = datacenter
 		}).
 		AddInputField("Project", "", 20, nil, func(project string) {
-			projectName = project
+			currentProject.project = project
 		}).
 		AddButton("Save", func() {
-			projectExists(app, projectName, dc)
+			projectExists(app, currentProject)
 		}).
 		AddButton("Quit", func() {
 			app.Stop()
@@ -54,14 +59,14 @@ func displayError(message string, app *tview.Application) {
 	}
 }
 
-func displayRessources(output string, app *tview.Application, project string, dc string) {
+func displayRessources(output string, app *tview.Application, project Project) {
 	newPrimitive := func(text string) tview.Primitive {
 		return tview.NewTextView().
 			SetTextAlign(tview.AlignCenter).
 			SetText(text)
 	}
 	grid := tview.NewGrid()
-	ressources := []string{"server", "volume", "network", "subnet", "loadbalancer"}
+	project.ressources = []string{"server", "volume", "network", "subnet", "loadbalancer"}
 	infoList := newPrimitive("List of ressources")
 	infoShow := newPrimitive("Information regarding ressource")
 
@@ -71,12 +76,13 @@ func displayRessources(output string, app *tview.Application, project string, dc
 
 	updateNav := func() {
 		navigation.Clear()
-		for _, ressource := range ressources {
-			navigation.AddItem(ressource, "", 0, func() {
-				listRessources(app, project, dc, ressource, grid, infoList, infoShow)
+		i := 0
+		for index := range project.ressources {
+			navigation.AddItem(project.ressources[index], "", 0, func() {
+				listRessources(app, project, navigation.GetCurrentItem(), grid, infoList, infoShow)
 			})
+			i++
 		}
-
 	}
 	updateNav()
 
@@ -102,18 +108,19 @@ func displayRessources(output string, app *tview.Application, project string, dc
 
 }
 
-func projectExists(app *tview.Application, project string, dc string) {
-	cmd := exec.Command("openstack", "--os-cloud", dc, "project", "show", project)
+func projectExists(app *tview.Application, project Project) {
+	cmd := exec.Command("openstack", "--os-cloud", project.dc, "project", "show", project.project)
 	out, err := cmd.Output()
 	if err != nil {
 		displayError("The project doesn't exist!", app)
 	} else {
-		displayRessources(string(out), app, project, dc)
+		displayRessources(string(out), app, project)
 	}
 }
 
-func listRessources(app *tview.Application, project string, dc string, ressource string, grid *tview.Grid, infoList tview.Primitive, infoShow tview.Primitive) {
-	cmd := exec.Command("openstack", "--os-cloud", dc, ressource, "list", "-f", "json")
+func listRessources(app *tview.Application, project Project, ressourceIndex int, grid *tview.Grid, infoList tview.Primitive, infoShow tview.Primitive) {
+	cmd := exec.Command("openstack", "--os-cloud", project.dc, project.ressources[ressourceIndex], "list", "-f", "json")
+	//cmd := exec.Command("openstack", "--os-cloud", "dc4-a", "server", "list", "-f", "json")
 	out, err := cmd.Output()
 	if err != nil {
 		displayError("No ressource found!", app)
@@ -134,23 +141,21 @@ func listRessources(app *tview.Application, project string, dc string, ressource
 					if ressourceItem.Flavor != "" {
 						displayName = displayName + " | " + ressourceItem.Flavor
 					}
-
 					ressourceList.AddItem(displayName+"  ", "", 0, func() {
-						showRessource(app, dc, ressource, ressourceItem.ID, grid, infoShow)
+						showRessource(app, project, ressourceList.GetCurrentItem(), ressourceItem.ID, grid, infoShow)
 					})
 				}
 			}
 			updateList()
 			grid.RemoveItem(infoList)
-			grid.RemoveItem(ressourceList)
 			grid.AddItem(ressourceList, 0, 1, 1, 1, 0, 0, true)
 		}
 	}
 
 }
 
-func showRessource(app *tview.Application, dc string, ressource string, id string, grid *tview.Grid, infoShow tview.Primitive) {
-	cmd := exec.Command("openstack", "--os-cloud", dc, ressource, "show", id, "-f", "json")
+func showRessource(app *tview.Application, project Project, ressourceIndex int, id string, grid *tview.Grid, infoShow tview.Primitive) {
+	cmd := exec.Command("openstack", "--os-cloud", project.dc, project.ressources[ressourceIndex], "show", id, "-f", "json")
 	out, err := cmd.Output()
 	if err != nil {
 		displayError("No ressource found!", app)
